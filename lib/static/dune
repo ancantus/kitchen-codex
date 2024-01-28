@@ -1,0 +1,9 @@
+(library
+   (name static)
+   (libraries crunch))
+
+(rule
+ (target static.ml)
+ (deps (source_tree .))
+ (action (with-stdout-to %{null}
+  (run ocaml-crunch -m plain . -o %{target}))))

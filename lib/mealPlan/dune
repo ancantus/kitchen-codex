@@ -1,0 +1,9 @@
+(library
+ (name mealPlan)
+ (libraries dream calendar tyxml)
+ (preprocess (pps lwt_ppx tyxml-ppx)))
+
+;; (rule
+;; (targets template.ml)
+;; (deps template.eml.html)
+;; (action (run dream_eml %{deps} --workspace %{workspace_root})))

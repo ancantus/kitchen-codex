@@ -1,0 +1,5 @@
+(executable
+ (public_name kitchen_codex)
+ (name main)
+ (libraries mealPlan static dream tyxml)
+ (preprocess (pps lwt_ppx tyxml-ppx)))

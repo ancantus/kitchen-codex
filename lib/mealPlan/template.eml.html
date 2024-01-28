@@ -1,0 +1,24 @@
+let render_meal_plan_table meal_plan_list =
+	<table class="table">
+		<thread>
+			<tr>
+				<th>Date</th>
+				<th>Breakfast</th>
+				<th>Lunch</th>
+				<th>Dinner</th>
+				<th><th> <!-- Editing Controls -->
+			</tr>
+		</thread>
+		<tbody>
+			<%s! List.map render_meal_plan_row meal_plan_list |> List.fold_left %>
+		</tbody>
+	</table>
+
+let render_meal_plan_row meal_plan =
+	<tr>
+		<td><%s CalendarLib.Printer.Date.sprint "%A %d/%m/%Y" meal_plan.date %s></td>
+		<td><input name="breakfast" value="<%s Option.value meal_plan.breakfast ~default %s>"></td>
+		<td><input name="lunch" value="<%s Option.value meal_plan.lunch ~default %s>"></td>
+		<td><input name="dinner" value="<%s Option.value meal_plan.dinner ~default %s>"></td>
+	</tr>
+	
