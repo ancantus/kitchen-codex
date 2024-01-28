@@ -13,8 +13,26 @@ let%html render_date date =
 let%html render_meal meal_type meal_name =
         "<td><input name="meal_type" value="(Option.value meal_name ~default:"")"></td>"
 
+let meal_plan_url date = "/meal-plan/" ^ (CalendarLib.Printer.Date.to_string date) 
+
+let%html render_edit_button date = {|
+        <td>
+                <button class="btn btn-danger"
+                        data-hx-target="closest tr"
+                        data-hx-swap="outerHTML"
+                        data-hx-include="closest tr"
+                        data-hx-patch=|} (meal_plan_url date) 
+                {|>Save</button>
+        </td>|}
+
 let%html render_meal_plan_row meal_plan =
-                "<tr>" (render_date meal_plan.date @ [ render_meal "breakfast" meal_plan.breakfast; render_meal "lunch" meal_plan.lunch; render_meal "dinner" meal_plan.dinner]) "</tr>"
+                "<tr>" (render_date meal_plan.date 
+                        @ [ 
+                                render_meal "breakfast" meal_plan.breakfast; 
+                                render_meal "lunch" meal_plan.lunch; 
+                                render_meal "dinner" meal_plan.dinner;
+                                render_edit_button meal_plan.date;
+                        ]) "</tr>"
 
 let%html render_meal_plan_table meal_plan_list = {|
 	<table class="table">
@@ -53,4 +71,9 @@ let lookup_meal_plan date =
 let meal_plan_table start_date end_date =
         let dates = date_list start_date end_date in
         render_meal_plan_table (List.map lookup_meal_plan dates)
+
+let update date request =
+        print_endline (CalendarLib.Printer.Date.to_string date);
+        print_endline request;
+        lookup_meal_plan date |> render_meal_plan_row
 
