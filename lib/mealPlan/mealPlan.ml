@@ -1,12 +1,5 @@
 open Tyxml
 
-type meal_plan = {
-	date: CalendarLib.Date.t;
-	breakfast: string option;
-	lunch: string option;
-	dinner: string option;
-}
-
 let%html render_date date =
         "<td>"[Html.txt (CalendarLib.Printer.Date.sprint "%A" date)]"</td><td>"[Html.txt (CalendarLib.Printer.Date.sprint "%d/%m/%Y" date)]"</td>"
 
@@ -25,7 +18,7 @@ let%html render_edit_button date = {|
                 {|>Save</button>
         </td>|}
 
-let%html render_meal_plan_row meal_plan =
+let%html render_meal_plan_row (meal_plan:Types.meal_plan) =
                 "<tr>" (render_date meal_plan.date 
                         @ [ 
                                 render_meal "breakfast" meal_plan.breakfast; 
@@ -65,15 +58,29 @@ let date_list start_date end_date =
                 then inner CalendarLib.Date.next end_date [start_date]
                 else inner CalendarLib.Date.prev end_date [start_date]
 
-let lookup_meal_plan date =
-        {date; breakfast=None; lunch=None; dinner=None} 
-
 let meal_plan_table start_date end_date =
         let dates = date_list start_date end_date in
-        render_meal_plan_table (List.map lookup_meal_plan dates)
+        render_meal_plan_table (List.map Codex.load_meal_plan dates)
 
-let update date request =
-        print_endline (CalendarLib.Printer.Date.to_string date);
-        print_endline request;
-        lookup_meal_plan date |> render_meal_plan_row
+
+let parse date fields =
+        let validate_meal meal_str =
+                match String.trim meal_str with
+                | "" -> None
+                | s -> Some s
+        in
+        let find_meal name =
+                match List.find_opt (fun (meal_name, _) -> String.equal meal_name name) fields with 
+                        | None -> None
+                        | Some (_, meal_str) -> validate_meal meal_str
+        in
+        {
+                Types.date=date; 
+                Types.breakfast=find_meal "breakfast"; 
+                Types.lunch=find_meal "lunch"; 
+                Types.dinner=find_meal "dinner";
+        }
+
+let update plan =
+        Codex.update_meal_plan plan |> render_meal_plan_row
 

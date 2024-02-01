@@ -42,8 +42,8 @@ let () =
       render_meal_plan s e |> html_to_string |> Dream.html);
     Dream.patch "/meal-plan/:date" (fun request ->
       let date = Dream.param request "date" |> parse_date in
-      let%lwt body = Dream.body request in
-      MealPlan.update date body
-        |> elt_to_string
-        |> Dream.html);
+      match%lwt Dream.form ?csrf:(Some false) request with
+                | `Ok fields -> MealPlan.parse date fields |> MealPlan.update |> elt_to_string |> Dream.html
+                | _ -> Dream.empty `Bad_Request
+      );
   ]

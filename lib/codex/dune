@@ -1,0 +1,3 @@
+(library
+   (name codex)
+   (libraries types calendar sqlite3))

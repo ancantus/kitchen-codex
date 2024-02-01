@@ -1,4 +1,4 @@
 (library
  (name mealPlan)
- (libraries dream calendar tyxml)
+ (libraries types codex dream calendar tyxml)
  (preprocess (pps lwt_ppx tyxml-ppx)))
