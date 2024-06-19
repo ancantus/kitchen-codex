@@ -5,6 +5,7 @@ let%html render_meal_plan start_date end_date = {|
   <head>
     <title>The Meal Plan</title>
     <script src="static/htmx.1.9.10.min.js"></script>
+    <link rel="stylesheet" href="static/main.css">
   </head>
   <body>
 <h1>Meal Plan:</h1>|}
@@ -40,6 +41,11 @@ let () =
       let s = Dream.query request "start" |> parse_opt_date in
       let e = Dream.query request "end" |> parse_opt_date in
       render_meal_plan s e |> html_to_string |> Dream.html);
+    Dream.post "/meal/search" (fun request ->
+      match%lwt Dream.form ?csrf:(Some false) request with
+                | `Ok [(_, search_str)] -> print_endline search_str; (Dream.empty `Bad_Request)
+                | _ -> Dream.empty `Bad_Request
+    ); 
     Dream.patch "/meal-plan/:date" (fun request ->
       let date = Dream.param request "date" |> parse_date in
       match%lwt Dream.form ?csrf:(Some false) request with

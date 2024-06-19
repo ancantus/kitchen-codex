@@ -139,6 +139,14 @@ let write_meal_plan db (plan:Types.meal_plan) =
                 | Sqlite3.Rc.DONE -> ()
                 | _ -> failwith ("Unable to write meal plan " ^ date_str)
 
+(* TODO: use sqlite's FTS5 virtual table to accelerate this *)
+let fuzzy_match_meals db query =
+        let (_, meals) = bind_exec db
+                ?ret:(Some (fun stmt -> Sqlite3.column_text stmt 0))
+                ?bind:(Some [Sqlite3.Data.TEXT ("%" ^ query ^ "%")])
+                "SELECT name FROM meals WHERE name LIKE ?;" in
+        meals
+
 let load_meal_plan date =
         let db = open_db () in
         let meal_plan = read_meal_plan db date in
@@ -151,3 +159,18 @@ let update_meal_plan plan =
         let updated_plan = read_meal_plan db plan.date in
         let _ = Sqlite3.db_close db in
         updated_plan
+
+let search_meal search_str =
+        let db = open_db () in
+        let canidate_meals = fuzzy_match_meals db search_str in
+        let _ = Sqlite3.db_close db in
+        canidate_meals
+
+let clear () = 
+        let db = open_db () in
+        let checked_exec sql = Sqlite3.Rc.check (Sqlite3.exec db sql) in
+        checked_exec "DELETE FROM meals;";
+        checked_exec "DELETE FROM plans;";
+        let _ = Sqlite3.db_close db in
+        ()
+

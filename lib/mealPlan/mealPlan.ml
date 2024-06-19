@@ -3,8 +3,19 @@ open Tyxml
 let%html render_date date =
         "<td>"[Html.txt (CalendarLib.Printer.Date.sprint "%A" date)]"</td><td>"[Html.txt (CalendarLib.Printer.Date.sprint "%d/%m/%Y" date)]"</td>"
 
-let%html render_meal meal_type meal_name =
-        "<td><input name="meal_type" value="(Option.value meal_name ~default:"")"></td>"
+let%html render_meal meal_type meal_name = {|
+        <td>
+                <input 
+                        name=|}meal_type{| 
+                        type="search"
+                        value=|}(Option.value meal_name ~default:""){|
+                        data-hx-post="meal/search"
+                        data-hx-trigger="input changed delay:500ms, search"
+                        data-hx-target="next .search-results"
+                >
+                <div class="search-results"></div>
+        </td>
+        |}
 
 let meal_plan_url date = "/meal-plan/" ^ (CalendarLib.Printer.Date.to_string date) 
 
