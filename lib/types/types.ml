@@ -26,5 +26,5 @@ let meal_plan_eq lhs rhs =
 
 let meal_plan_to_str plan =
 	let opt_to_str opt = match opt with Some s -> s | None -> "None" in
-	let date_to_str date = CalendarLib.Printer.Date.sprint "%A" date in
+	let date_to_str date = CalendarLib.Printer.Date.sprint "%Y-%m-%d" date in
 	Printf.sprintf "{meal_plan date: %s, breakfast: %s, lunch: %s, dinner: %s}" (date_to_str plan.date) (opt_to_str plan.breakfast) (opt_to_str plan.lunch) (opt_to_str plan.dinner) 

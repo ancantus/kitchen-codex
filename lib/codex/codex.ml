@@ -1,11 +1,20 @@
 let parse_str_op stmt column =
         Some (Sqlite3.column_text stmt column)
 
+(* Simple fire and forget DB execution when only success / failure is needed *)
+let rec checked_exec db sql =
+        match Sqlite3.exec db sql with
+                | Sqlite3.Rc.OK -> ()
+                | Sqlite3.Rc.BUSY -> checked_exec db sql
+                | err -> Sqlite3.Rc.check err
+
+(* More complicated DB execution with overridable parsed return vals and bind data *)
 let bind_exec db ?ret ?bind sql =
         let stmt = Sqlite3.prepare db sql in
-        let checked_bind i bind_val = 
+        let rec checked_bind i bind_val = 
                 match Sqlite3.bind stmt i bind_val with
                         | Sqlite3.Rc.OK -> ()
+                        | Sqlite3.Rc.BUSY -> checked_bind i bind_val
                         | fault -> failwith ("Unable to bind " ^ (Int.to_string i) ^ "'th statement in " ^ sql ^ " (" ^ (Sqlite3.Rc.to_string fault) ^ ")")
         in
         let rec bind_all i l = 
@@ -14,22 +23,24 @@ let bind_exec db ?ret ?bind sql =
                         | head :: tail -> checked_bind i head; bind_all (i+1) tail
         in 
         bind_all 1 (Option.value bind ~default:[]);
+        let rec step stmt = match Sqlite3.step stmt with
+                | Sqlite3.Rc.BUSY -> step stmt
+                | r -> r in
         let rec build_results f r =
-                match Sqlite3.step stmt with
+                match step stmt with
                         | Sqlite3.Rc.DONE -> (Sqlite3.Rc.DONE, r)
                         | Sqlite3.Rc.ROW -> build_results f ((f stmt) :: r)
                         | fault -> (fault, r)
         in 
-        let return_values = match ret with None -> (Sqlite3.step stmt, []) | Some f -> build_results f [] in
-        match Sqlite3.finalize stmt with
-                | Sqlite3.Rc.OK -> return_values
-                | fault -> failwith ("Failed to close " ^ sql ^ " (" ^ (Sqlite3.Rc.to_string fault) ^ ")") 
+        let return_values = match ret with None -> (step stmt, []) | Some f -> build_results f [] in
+        let _ = Sqlite3.finalize stmt in  (* Finalize always succeeds: and the return code is the same as already packed ret_val *)
+        return_values
 
 let read_version db =
         try (
                 let (rc, versions) = bind_exec db ?ret:(Some (fun stmt -> let i = Sqlite3.column_int stmt 0 in print_int i; i)) "SELECT codex_version FROM versions LIMIT 1;" in
                 match rc with
-                        |  Sqlite3.Rc.DONE -> print_endline ("Version: " ^ (Int.to_string (List.length versions))); Some (List.hd versions)
+                        |  Sqlite3.Rc.DONE -> Some (List.hd versions)
                         | _ -> None
         ) with 
                 | Sqlite3.Error _ -> None
@@ -41,7 +52,7 @@ let timestamp_now () =
 
 let migrate_schema db version =
         print_endline ("Updating to version " ^ (Int.to_string version));
-        let checked_exec sql = Sqlite3.Rc.check (Sqlite3.exec db sql) in
+        let checked_exec = checked_exec db in
         let update_version num = checked_exec ("UPDATE versions SET codex_version = " ^ (Int.to_string num) ^ ", last_modified = \"" ^ (timestamp_now ()) ^ "\";") in
         let rec migrate v = 
                 match v with
@@ -168,7 +179,7 @@ let search_meal search_str =
 
 let clear () = 
         let db = open_db () in
-        let checked_exec sql = Sqlite3.Rc.check (Sqlite3.exec db sql) in
+        let checked_exec = checked_exec db in
         checked_exec "DELETE FROM meals;";
         checked_exec "DELETE FROM plans;";
         let _ = Sqlite3.db_close db in

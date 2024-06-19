@@ -18,6 +18,12 @@ let tests_load_meal_plan = "meal plan test suite" >::: [
                 let date = CalendarLib.Date.make 2024 1 1 in
                 let expected_meal_plan = {Types.date=date; Types.breakfast=Some "Groats"; Types.lunch=Some "Ham Sandwich"; Types.dinner=Some "Tacos"} in
                 assert_meal_plan_equal expected_meal_plan (Codex.update_meal_plan expected_meal_plan));
+        "load existing meal plan" >:: (fun _ ->
+                Codex.clear();
+                let date = CalendarLib.Date.make 2024 1 1 in
+                let expected_meal_plan = {Types.date=date; Types.breakfast=Some "Groats"; Types.lunch=Some "Ham Sandwich"; Types.dinner=Some "Tacos"} in
+                let _ = Codex.update_meal_plan expected_meal_plan in
+                assert_meal_plan_equal expected_meal_plan (Codex.load_meal_plan date));
 ]
 
 let codex_tests = "codex test suite" >::: [
