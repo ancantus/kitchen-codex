@@ -1,3 +1,4 @@
 (test
  (name test_kitchen_codex)
- (libraries ounit2 calendar types codex))
+ (libraries ounit2 ounit2-lwt calendar types codex caqti-lwt caqti-lwt.unix uuidm)
+ (preprocess (pps lwt_ppx)))

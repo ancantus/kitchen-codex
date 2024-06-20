@@ -19,7 +19,7 @@
  (name kitchen_codex)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml dune)
+ (depends ocaml dune caqti-driver-sqlite3 dream calendar)
  (tags
   (topics "to describe" your project)))
 

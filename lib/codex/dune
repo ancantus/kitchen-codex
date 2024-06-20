@@ -1,3 +1,5 @@
 (library
    (name codex)
-   (libraries types calendar sqlite3))
+   (libraries types calendar caqti caqti-lwt caqti-lwt.unix caqti-type-calendar caqti-driver-sqlite3 sqlite3)
+   (flags (-linkall))
+   (preprocess (pps lwt_ppx)))
