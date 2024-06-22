@@ -55,7 +55,6 @@ let%html render_meal_plan_table meal_plan_list = {|
                 {|</tbody>
         </table>|}
 
-
 let date_list start_date end_date =
         let rec inner inc stop dates =
                match dates with
@@ -68,11 +67,6 @@ let date_list start_date end_date =
         if (CalendarLib.Date.Period.nb_days range_length) > 0
                 then inner CalendarLib.Date.next end_date [start_date]
                 else inner CalendarLib.Date.prev end_date [start_date]
-
-let meal_plan_table start_date end_date =
-        let dates = date_list start_date end_date in
-        render_meal_plan_table (List.map Codex.load_meal_plan dates)
-
 
 let parse date fields =
         let validate_meal meal_str =
@@ -91,7 +85,4 @@ let parse date fields =
                 Types.lunch=find_meal "lunch"; 
                 Types.dinner=find_meal "dinner";
         }
-
-let update plan =
-        Codex.update_meal_plan plan |> render_meal_plan_row
 

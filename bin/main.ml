@@ -1,6 +1,6 @@
 open Tyxml
 
-let%html render_meal_plan start_date end_date = {|
+let%html render_meal_plan meal_plans = {|
   <html>
   <head>
     <title>The Meal Plan</title>
@@ -9,7 +9,7 @@ let%html render_meal_plan start_date end_date = {|
   </head>
   <body>
 <h1>Meal Plan:</h1>|}
-  [MealPlan.meal_plan_table start_date end_date]
+  [MealPlan.render_meal_plan_table meal_plans]
 {|</body>
   </html>|}
 
@@ -24,7 +24,6 @@ let html_to_string html =
 let elt_to_string elt =
   Format.asprintf "%a" (Tyxml.Html.pp_elt ()) elt 
 
-
 let parse_date date_str = CalendarLib.Printer.Date.from_fstring "%Y-%m-%d" date_str
 
 let parse_opt_date date = 
@@ -32,24 +31,37 @@ let parse_opt_date date =
     | None -> failwith "Date not specified."
     | Some date_str -> parse_date date_str
 
+let db_uri = "sqlite3:/tmp/codex.sql" 
+
 let () =
+  Lwt_main.run (Codex.run_caqti db_uri (Codex.migrate_to_latest ()));
   Dream.run
   @@ Dream.logger
+  @@ Dream.sql_pool db_uri
   @@ Dream.router [
     Dream.get "/static/**" (Dream.static ~loader:static_loader "");
     Dream.get "/meal-plan" (fun request ->
       let s = Dream.query request "start" |> parse_opt_date in
       let e = Dream.query request "end" |> parse_opt_date in
-      render_meal_plan s e |> html_to_string |> Dream.html);
-    Dream.post "/meal/search" (fun request ->
+      match%lwt MealPlan.date_list s e |> Codex.get_meal_plans |> Dream.sql request with
+        | Ok meal_plans -> render_meal_plan meal_plans |> html_to_string |> Dream.html
+        | Error e -> failwith (Caqti_error.show e)
+    );
+    (*Dream.post "/meal/search" (fun request ->
       match%lwt Dream.form ?csrf:(Some false) request with
                 | `Ok [(_, search_str)] -> print_endline search_str; (Dream.empty `Bad_Request)
                 | _ -> Dream.empty `Bad_Request
-    ); 
+    );*) 
     Dream.patch "/meal-plan/:date" (fun request ->
       let date = Dream.param request "date" |> parse_date in
       match%lwt Dream.form ?csrf:(Some false) request with
-                | `Ok fields -> MealPlan.parse date fields |> MealPlan.update |> elt_to_string |> Dream.html
-                | _ -> Dream.empty `Bad_Request
+        | `Ok fields -> (match%lwt Dream.sql request (Codex.update_meal_plan (MealPlan.parse date fields)) with
+          | Error _ -> Dream.empty `Internal_Server_Error
+          | Ok _ -> (match%lwt Dream.sql request (Codex.get_meal_plan date) with
+            | Error _ -> Dream.empty `Internal_Server_Error
+            | Ok meal_plan -> MealPlan.render_meal_plan_row meal_plan |> elt_to_string |> Dream.html
+            )
+        )
+        | _ -> Dream.empty `Bad_Request
       );
   ]

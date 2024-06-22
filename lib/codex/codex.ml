@@ -1,190 +1,3 @@
-let parse_str_op stmt column =
-        Some (Sqlite3.column_text stmt column)
-
-(* Simple fire and forget DB execution when only success / failure is needed *)
-let rec checked_exec db sql =
-        match Sqlite3.exec db sql with
-                | Sqlite3.Rc.OK -> ()
-                | Sqlite3.Rc.BUSY -> checked_exec db sql
-                | err -> Sqlite3.Rc.check err
-
-(* More complicated DB execution with overridable parsed return vals and bind data *)
-let bind_exec db ?ret ?bind sql =
-        let stmt = Sqlite3.prepare db sql in
-        let rec checked_bind i bind_val = 
-                match Sqlite3.bind stmt i bind_val with
-                        | Sqlite3.Rc.OK -> ()
-                        | Sqlite3.Rc.BUSY -> checked_bind i bind_val
-                        | fault -> failwith ("Unable to bind " ^ (Int.to_string i) ^ "'th statement in " ^ sql ^ " (" ^ (Sqlite3.Rc.to_string fault) ^ ")")
-        in
-        let rec bind_all i l = 
-                match l with 
-                        | [] -> ()
-                        | head :: tail -> checked_bind i head; bind_all (i+1) tail
-        in 
-        bind_all 1 (Option.value bind ~default:[]);
-        let rec step stmt = match Sqlite3.step stmt with
-                | Sqlite3.Rc.BUSY -> step stmt
-                | r -> r in
-        let rec build_results f r =
-                match step stmt with
-                        | Sqlite3.Rc.DONE -> (Sqlite3.Rc.DONE, r)
-                        | Sqlite3.Rc.ROW -> build_results f ((f stmt) :: r)
-                        | fault -> (fault, r)
-        in 
-        let return_values = match ret with None -> (step stmt, []) | Some f -> build_results f [] in
-        let _ = Sqlite3.finalize stmt in  (* Finalize always succeeds: and the return code is the same as already packed ret_val *)
-        return_values
-
-let read_version db =
-        try (
-                let (rc, versions) = bind_exec db ?ret:(Some (fun stmt -> let i = Sqlite3.column_int stmt 0 in print_int i; i)) "SELECT codex_version FROM versions LIMIT 1;" in
-                match rc with
-                        |  Sqlite3.Rc.DONE -> Some (List.hd versions)
-                        | _ -> None
-        ) with 
-                | Sqlite3.Error _ -> None
-
-let timestamp_now () =
-        let time = CalendarLib.Time.now () |> CalendarLib.Time.to_gmt |> CalendarLib.Printer.Time.to_string in
-        let date = CalendarLib.Date.today () |> CalendarLib.Printer.Date.to_string in
-        date ^ "T" ^ time ^ "Z"
-
-let migrate_schema db version =
-        print_endline ("Updating to version " ^ (Int.to_string version));
-        let checked_exec = checked_exec db in
-        let update_version num = checked_exec ("UPDATE versions SET codex_version = " ^ (Int.to_string num) ^ ", last_modified = \"" ^ (timestamp_now ()) ^ "\";") in
-        let rec migrate v = 
-                match v with
-                        | 0 -> checked_exec "CREATE TABLE IF NOT EXISTS versions (
-                                        codex_version INTEGER NOT NULL, 
-                                        last_modified TEXT NOT NULL
-                                );"; 
-                                checked_exec ("INSERT INTO versions (codex_version, last_modified) VALUES (0, \"" ^ (timestamp_now ()) ^ "\");");
-                                migrate 1 
-                        | 1 -> checked_exec "CREATE TABLE IF NOT EXISTS meals (
-                                        id INTEGER PRIMARY KEY ASC, 
-                                        name TEXT UNIQUE,
-                                        last_modified TEXT NOT NULL
-                                );"; update_version 1; migrate 2
-                        | 2 -> checked_exec "CREATE TABLE IF NOT EXISTS plans (
-                                        id INTEGER PRIMARY KEY ASC, 
-                                        date TEXT UNIQUE NOT NULL,
-                                        breakfast INTEGER references meals(id),
-                                        lunch INTEGER references meals(id),
-                                        dinner INTEGER references meals(id)
-                                );"; update_version 2; migrate 3
-                        | _ -> ()
-        in
-        migrate version
-
-let open_db () =
-        let db = Sqlite3.db_open "/tmp/test.db" in
-        (match read_version db with 
-                | None -> migrate_schema db 0 
-                | Some n -> migrate_schema db (n + 1));
-        db
-
-let find_meal_plan_index db date =
-        let (_, indexes) = bind_exec db 
-                ?ret:(Some (fun stmt -> Sqlite3.column_int64 stmt 0)) 
-                ?bind:(Some [Sqlite3.Data.TEXT(CalendarLib.Printer.Date.to_string date)])
-                "SELECT id FROM plans WHERE date = ? LIMIT 1" in
-        match indexes with
-                | [] -> None
-                | index :: _ -> print_endline ("Index: " ^ (Int64.to_string index)); Some index 
-
-let read_meal_plan db date = 
-        let empty_meal_plan date = {Types.date=date; Types.breakfast=None; Types.lunch=None; Types.dinner=None} in
-        let parse_meal_plan stmt = {Types.date=date; Types.breakfast=parse_str_op stmt 1; Types.lunch=parse_str_op stmt 2; Types.dinner=parse_str_op stmt 3;} in 
-        let (_, meal_plans) = bind_exec db
-                ?ret:(Some parse_meal_plan)
-                ?bind:(Some [Sqlite3.Data.TEXT(CalendarLib.Printer.Date.to_string date)])
-                "SELECT p.date, b.name, l.name, d.name 
-                        FROM plans p
-                        LEFT JOIN meals b ON b.id = p.breakfast
-                        LEFT JOIN meals l ON l.id = p.lunch
-                        LEFT JOIN meals d ON d.id = p.dinner
-                        WHERE date = ? 
-                        LIMIT 1" in
-        match meal_plans with
-                | [] -> empty_meal_plan date
-                | meal_plan :: _ -> meal_plan
-
-let create_meal db meal =
-        let (rc, _) = bind_exec db 
-                ?bind:(Some [Sqlite3.Data.TEXT meal; Sqlite3.Data.TEXT (timestamp_now ())])
-                "INSERT INTO meals (name, last_modified) VALUES (?, ?);" in
-        match rc with
-                | Sqlite3.Rc.DONE -> Sqlite3.last_insert_rowid db
-                | fault -> failwith ("Unable to create meal: " ^ meal ^ ": " ^ (Sqlite3.Rc.to_string fault))
-
-let find_or_create_meal db meal =
-        let (_, meals) = bind_exec db
-                ?ret:(Some (fun stmt -> Sqlite3.column_int64 stmt 0))
-                ?bind:(Some [Sqlite3.Data.TEXT meal])
-                "SELECT id FROM meals WHERE name = ?;" in
-        match meals with
-                | [] -> create_meal db meal
-                | meal_id :: _ -> meal_id 
-
-let write_meal_plan db (plan:Types.meal_plan) =
-        let existing_plan = find_meal_plan_index db plan.date in 
-        let meal_bind meal_name =
-                match meal_name with
-                        | Some name -> Sqlite3.Data.INT (find_or_create_meal db name) 
-                        | None -> Sqlite3.Data.NULL
-        in
-        let date_str = CalendarLib.Printer.Date.to_string plan.date in
-        let (rc, _) = bind_exec db
-                ?bind:(Some ([
-                                Sqlite3.Data.TEXT date_str;
-                                meal_bind plan.breakfast;
-                                meal_bind plan.lunch;
-                                meal_bind plan.dinner;
-                ] @ (match existing_plan with Some p -> [Sqlite3.Data.INT p] | None -> [])))
-                (match existing_plan with
-                        | None -> "INSERT INTO plans (date, breakfast, lunch, dinner) VALUES (?, ?, ?, ?);"  
-                        | Some _ -> "UPDATE plans SET date = ?, breakfast = ?, lunch = ?, dinner = ? WHERE id = ?;") in
-        match rc with
-                | Sqlite3.Rc.DONE -> ()
-                | _ -> failwith ("Unable to write meal plan " ^ date_str)
-
-(* TODO: use sqlite's FTS5 virtual table to accelerate this *)
-let fuzzy_match_meals db query =
-        let (_, meals) = bind_exec db
-                ?ret:(Some (fun stmt -> Sqlite3.column_text stmt 0))
-                ?bind:(Some [Sqlite3.Data.TEXT ("%" ^ query ^ "%")])
-                "SELECT name FROM meals WHERE name LIKE ?;" in
-        meals
-
-let load_meal_plan date =
-        let db = open_db () in
-        let meal_plan = read_meal_plan db date in
-        let _ = Sqlite3.db_close db in
-        meal_plan
-(*
-let update_meal_plan plan =
-        let db = open_db () in
-        write_meal_plan db plan;
-        let updated_plan = read_meal_plan db plan.date in
-        let _ = Sqlite3.db_close db in
-        updated_plan
-*)
-let search_meal search_str =
-        let db = open_db () in
-        let canidate_meals = fuzzy_match_meals db search_str in
-        let _ = Sqlite3.db_close db in
-        canidate_meals
-
-let clear () = 
-        let db = open_db () in
-        let checked_exec = checked_exec db in
-        checked_exec "DELETE FROM meals;";
-        checked_exec "DELETE FROM plans;";
-        let _ = Sqlite3.db_close db in
-        ()
-
 open Caqti_request.Infix
 module type DB = Caqti_lwt.CONNECTION
 module R = Caqti_request
@@ -268,10 +81,11 @@ let migrate_db version =
 let migrate_to_latest () =
         let rec inner (module Db: DB) = 
                 let%lwt target = (migrate_target ()) (module Db) in
-                print_endline ("Upgrading to target: " ^ (match target with Some i -> Int.to_string i | None -> "Done!!"));
+                let _ = match target with Some i -> print_endline ("Upgrading to database version: " ^ (Int.to_string i))  | _ -> () in
                 match target with 
-                        | None -> Lwt.return_unit 
-                        | Some version -> let%lwt _ = (migrate_db version) (module Db) in inner (module Db);
+                        | None -> print_endline "Database upgrade complete"; Lwt.return (Ok ())
+                        | Some version -> 
+                                let%lwt _ = (migrate_db version) (module Db) in inner (module Db);
         in
         inner
 
@@ -298,6 +112,19 @@ let get_meal_plan date =
                 Lwt.bind result (fun u -> match u with
                                 | Ok opt_u -> Lwt.return(Ok (Option.value opt_u ~default:{date=date; breakfast=None; lunch=None; dinner=None}))
                                 | Error e -> Lwt.return(Error e))
+
+let get_meal_plans dates = 
+        fun (module Db: DB) ->
+                (* TODO make custom query to increase speed if required *)
+                let%lwt plans = Lwt_list.map_s (fun d -> (get_meal_plan d) (module Db)) dates in
+                let rec inner l ret_l = 
+                        match l with 
+                                | [] -> Ok (List.rev ret_l)
+                                | Error e :: tail -> Error e 
+                                | Ok head :: tail -> inner tail (head :: ret_l)
+                in
+                Lwt.return (inner plans [])
+
 let get_meal_id name = 
         let query =
         let open R.Infix in (T.(option string) ->? T.int)

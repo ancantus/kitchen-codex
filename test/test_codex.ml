@@ -8,9 +8,9 @@ let assert_meal_plan_equal = assert_equal ~cmp:Types.meal_plan_eq ~printer:Types
 let empty_meal_plan date = {Types.date=date; Types.breakfast=None; Types.lunch=None; Types.dinner=None}
 let assert_meal_plan_empty date = assert_meal_plan_equal (empty_meal_plan date)
 
-
 module type DB = Caqti_lwt.CONNECTION
 let run_caqti_test callback =
+        (* create a randomly named in-memory SQLite database for each test. This keeps it unique even when running tests multi-threaded *)
         let uuid = (Uuidm.v4_gen (Random.State.make_self_init ())) () in
         let uri = Printf.sprintf "sqlite3:%s?mode=memory" (Uuidm.to_string uuid) in
         Codex.run_caqti uri (fun (module Db: DB) -> 
@@ -18,7 +18,7 @@ let run_caqti_test callback =
                 callback (module Db : DB)
         ) 
 
-let tests_caqti_codex = "Caqti codex refactor" >::: [
+let tests_meal_plan = "meal plan tests" >::: [
         "load empty meal plan" >:: (lwt_wrapper
                 (fun _ -> 
                         let date = CalendarLib.Date.make 2024 1 1 in
@@ -39,7 +39,6 @@ let tests_caqti_codex = "Caqti codex refactor" >::: [
         );
 ]
 
-
 let codex_tests = "codex test suite" >::: [
-        tests_caqti_codex;
+        tests_meal_plan;
 ]
