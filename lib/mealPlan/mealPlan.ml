@@ -25,6 +25,7 @@ let%html render_meal_search_result date category meals = {|
 
 let%html render_meal date meal_type meal_name= {|
         <td>
+                <div class="meal-input">
                 <input 
                         name=|}meal_type{| 
                         class="search-input"
@@ -32,12 +33,13 @@ let%html render_meal date meal_type meal_name= {|
                         value=|}(Option.value meal_name ~default:""){|
                         data-hx-get="meal-plan/meal-search"
                         data-hx-params="*"
-                        data-hx-trigger="input changed delay:500ms, search"
+                        data-hx-trigger="input changed delay:200ms, search, mouseenter throttle:2s"
                         data-hx-target="next .search-results"
                         data-hx-swap="outerHTML"
                         data-hx-vals=|} ("{\"date\":\"" ^ (date_str date) ^ "\"}") {|
                 >
                 |} [(render_meal_search_result None "" [])] {|
+                </div>
         </td>
         |}
 
