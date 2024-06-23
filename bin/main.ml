@@ -48,13 +48,18 @@ let () =
         | Error e -> failwith (Caqti_error.show e)
     );
     Dream.get "/meal-plan/meal-search" (fun request ->
-      match Dream.all_queries request with
-        | (_, search_req) :: [] -> (match%lwt Codex.search_for_meals search_req |> Dream.sql request with
-          | Ok (canidate_meals)-> MealPlan.render_meal_search_result canidate_meals |> elt_to_string |> Dream.html 
+      let date = Dream.query request "date" |> parse_opt_date in
+      let rec parse_query query =
+        match query with 
+          | ( "date", _ ) :: tail -> parse_query tail
+          | ( category, search) :: _ -> Some (category, search)
+          | [] -> None
+      in
+      match parse_query (Dream.all_queries request) with
+        | Some (category, search_req) -> (match%lwt Codex.search_for_meals search_req |> Dream.sql request with
+          | Ok (canidate_meals)-> MealPlan.render_meal_search_result (Some date) category canidate_meals |> elt_to_string |> Dream.html
           | Error _ -> Dream.empty `Internal_Server_Error)
         | _ -> Dream.empty `Bad_Request
-      (*List.iter (fun (key, value) -> print_endline (key ^ ": " ^ value)) (Dream.all_queries request); 
-      Dream.empty `Bad_Request*)
     ); 
     Dream.patch "/meal-plan/:date" (fun request ->
       let date = Dream.param request "date" |> parse_date in

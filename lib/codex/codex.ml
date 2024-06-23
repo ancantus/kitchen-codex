@@ -127,7 +127,7 @@ let get_meal_plans dates =
 
 let get_meal_id name = 
         let query =
-        let open R.Infix in (T.(option string) ->? T.int)
+        let open R.Infix in (T.string ->? T.int)
         "SELECT id FROM meals WHERE name = $1;" in
         fun (module Db: DB) -> Db.find_opt query name 
 
@@ -136,16 +136,19 @@ let find_or_create_meal name =
         let open R.Infix in T.(t2 T.string Ccal.ctime ->. T.unit)
         "INSERT INTO meals (name, last_modified) VALUES ($1, $2);" in
         fun (module Db: DB) ->
-                let%lwt meal_id = match%lwt (get_meal_id name) (module Db) with Ok id -> Lwt.return id | Error e -> failwith (E.show e) in
-                match meal_id with
-                        | Some id -> Lwt.return id (* early return of existing meal *)
-                        | None -> (
-                                        (* otherwise we're creating a new meal! *)
-                                        let%lwt _ = Db.exec query (Option.get name, CalendarLib.Calendar.now ()) in 
-                                        match%lwt (get_meal_id name) (module Db) with
-                                                | Ok id -> Option.get id |> Lwt.return
-                                                | Error e -> failwith (E.show e)
-        )
+                match name with
+                        | None -> Lwt.return None
+                        | Some n -> (
+                                let%lwt meal_id = match%lwt (get_meal_id n) (module Db) with Ok id -> Lwt.return id | Error e -> failwith (E.show e) in
+                                match meal_id with
+                                | Some id -> Lwt.return (Some id) (* early return of existing meal *)
+                                | None -> (
+                                                (* otherwise we're creating a new meal! *)
+                                                let%lwt _ = Db.exec query (n, CalendarLib.Calendar.now ()) in 
+                                                match%lwt (get_meal_id n) (module Db) with
+                                                        | Ok id -> Lwt.return id
+                                                        | Error e -> failwith (E.show e))
+                        )
 
 let update_meal_plan (plan: Types.meal_plan) = 
         let query =
@@ -155,7 +158,7 @@ let update_meal_plan (plan: Types.meal_plan) =
                 let%lwt breakfast_id = (find_or_create_meal plan.breakfast) (module Db) in
                 let%lwt lunch_id = (find_or_create_meal plan.lunch) (module Db) in
                 let%lwt dinner_id = (find_or_create_meal plan.dinner) (module Db) in
-                Db.exec query (plan.date, Some breakfast_id, Some lunch_id, Some dinner_id)
+                Db.exec query (plan.date, breakfast_id, lunch_id, dinner_id)
 
 (* Todo: this could be smarter & search for fragment strings inside *)
 let search_for_meals search_str =

@@ -1,16 +1,29 @@
 open Tyxml
 
-let%html render_date date =
-        "<td>"[Html.txt (CalendarLib.Printer.Date.sprint "%A" date)]"</td><td>"[Html.txt (CalendarLib.Printer.Date.sprint "%d/%m/%Y" date)]"</td>"
+let date_str = CalendarLib.Printer.Date.to_string 
 
-let%html render_meal_suggestion meal_name = {|<div class="search-item">|}[Html.txt meal_name]{|</div>|}
+let meal_plan_url date = "/meal-plan/" ^ (date_str date)
 
-let%html render_meal_search_result meals = {| 
-        <div class=|} ((if List.is_empty meals then ["hidden"] else []) @ ["search-results"]) {|> |}
-        (List.map render_meal_suggestion meals)
-       {|</div>|}
+let%html render_date date = {|
+        <td>|} [Html.txt (CalendarLib.Printer.Date.sprint "%A" date)] {|</td><td>|} [Html.txt (CalendarLib.Printer.Date.sprint "%d/%m/%Y" date)] {|</td>|}
 
-let%html render_meal meal_type meal_name = {|
+let%html render_meal_suggestion patch_url category meal_name = {|<div class="search-item"
+                data-hx-target="closest tr"
+                data-hx-trigger="click"
+                data-hx-swap="outerHTML"
+                data-hx-include="closest tr"
+                data-hx-vals=|} ("{\"" ^ category ^ "\":\"" ^ meal_name ^ "\"}") {|
+                data-hx-patch=|} patch_url {|
+        >|}[Html.txt meal_name]{|</div>|}
+
+let%html render_meal_search_result date category meals = {| 
+        <div class=|} ((if List.is_empty meals then ["hidden"] else []) @ ["search-results"]) {|
+
+        > |}
+          (List.map (render_meal_suggestion (match date with None -> "INVALID" | Some d -> (meal_plan_url d)) category)  meals )
+        {|</div>|}
+
+let%html render_meal date meal_type meal_name= {|
         <td>
                 <input 
                         name=|}meal_type{| 
@@ -22,12 +35,12 @@ let%html render_meal meal_type meal_name = {|
                         data-hx-trigger="input changed delay:500ms, search"
                         data-hx-target="next .search-results"
                         data-hx-swap="outerHTML"
+                        data-hx-vals=|} ("{\"date\":\"" ^ (date_str date) ^ "\"}") {|
                 >
-                |} [(render_meal_search_result [])] {|
+                |} [(render_meal_search_result None "" [])] {|
         </td>
         |}
 
-let meal_plan_url date = "/meal-plan/" ^ (CalendarLib.Printer.Date.to_string date) 
 
 let%html render_edit_button date = {|
         <td>
@@ -42,9 +55,9 @@ let%html render_edit_button date = {|
 let%html render_meal_plan_row (meal_plan:Types.meal_plan) =
                 "<tr>" (render_date meal_plan.date 
                         @ [ 
-                                render_meal "breakfast" meal_plan.breakfast; 
-                                render_meal "lunch" meal_plan.lunch; 
-                                render_meal "dinner" meal_plan.dinner;
+                                render_meal meal_plan.date "breakfast" meal_plan.breakfast; 
+                                render_meal meal_plan.date "lunch" meal_plan.lunch; 
+                                render_meal meal_plan.date "dinner" meal_plan.dinner;
                                 render_edit_button meal_plan.date;
                         ]) "</tr>"
 

@@ -2,6 +2,10 @@
 	display: block;
 }
 
+.search-results:hover {
+	display:block;
+}
+
 .search-results {
 	position: absolute;
 	border: 1px solid red;
