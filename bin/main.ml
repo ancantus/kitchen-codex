@@ -47,11 +47,15 @@ let () =
         | Ok meal_plans -> render_meal_plan meal_plans |> html_to_string |> Dream.html
         | Error e -> failwith (Caqti_error.show e)
     );
-    (*Dream.post "/meal/search" (fun request ->
-      match%lwt Dream.form ?csrf:(Some false) request with
-                | `Ok [(_, search_str)] -> print_endline search_str; (Dream.empty `Bad_Request)
-                | _ -> Dream.empty `Bad_Request
-    );*) 
+    Dream.get "/meal-plan/meal-search" (fun request ->
+      match Dream.all_queries request with
+        | (_, search_req) :: [] -> (match%lwt Codex.search_for_meals search_req |> Dream.sql request with
+          | Ok (canidate_meals)-> MealPlan.render_meal_search_result canidate_meals |> elt_to_string |> Dream.html 
+          | Error _ -> Dream.empty `Internal_Server_Error)
+        | _ -> Dream.empty `Bad_Request
+      (*List.iter (fun (key, value) -> print_endline (key ^ ": " ^ value)) (Dream.all_queries request); 
+      Dream.empty `Bad_Request*)
+    ); 
     Dream.patch "/meal-plan/:date" (fun request ->
       let date = Dream.param request "date" |> parse_date in
       match%lwt Dream.form ?csrf:(Some false) request with

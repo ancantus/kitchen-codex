@@ -3,17 +3,27 @@ open Tyxml
 let%html render_date date =
         "<td>"[Html.txt (CalendarLib.Printer.Date.sprint "%A" date)]"</td><td>"[Html.txt (CalendarLib.Printer.Date.sprint "%d/%m/%Y" date)]"</td>"
 
+let%html render_meal_suggestion meal_name = {|<div class="search-item">|}[Html.txt meal_name]{|</div>|}
+
+let%html render_meal_search_result meals = {| 
+        <div class=|} ((if List.is_empty meals then ["hidden"] else []) @ ["search-results"]) {|> |}
+        (List.map render_meal_suggestion meals)
+       {|</div>|}
+
 let%html render_meal meal_type meal_name = {|
         <td>
                 <input 
                         name=|}meal_type{| 
+                        class="search-input"
                         type="search"
                         value=|}(Option.value meal_name ~default:""){|
-                        data-hx-post="meal/search"
+                        data-hx-get="meal-plan/meal-search"
+                        data-hx-params="*"
                         data-hx-trigger="input changed delay:500ms, search"
                         data-hx-target="next .search-results"
+                        data-hx-swap="outerHTML"
                 >
-                <div class="search-results"></div>
+                |} [(render_meal_search_result [])] {|
         </td>
         |}
 

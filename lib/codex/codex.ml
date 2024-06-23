@@ -156,4 +156,12 @@ let update_meal_plan (plan: Types.meal_plan) =
                 let%lwt lunch_id = (find_or_create_meal plan.lunch) (module Db) in
                 let%lwt dinner_id = (find_or_create_meal plan.dinner) (module Db) in
                 Db.exec query (plan.date, Some breakfast_id, Some lunch_id, Some dinner_id)
- 
+
+(* Todo: this could be smarter & search for fragment strings inside *)
+let search_for_meals search_str =
+        let query = 
+        let open R.Infix in (T.string ->* T.string)
+                "SELECT name from meals WHERE name LIKE $1"
+        in
+        fun (module Db: DB) -> Db.collect_list query (search_str ^ "%")
+

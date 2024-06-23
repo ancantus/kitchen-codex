@@ -1,0 +1,13 @@
+.search-input:focus + .search-results {
+	display: block;
+}
+
+.search-results {
+	position: absolute;
+	border: 1px solid red;
+	display: none;
+}
+
+.hidden {
+	display: none;
+}
