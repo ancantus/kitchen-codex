@@ -3,6 +3,8 @@ open Tyxml
 let date_str = CalendarLib.Printer.Date.to_string 
 
 let meal_plan_url date = "/meal-plan/" ^ (date_str date)
+let patch_meal_url date category = (meal_plan_url date) ^ "/" ^ category
+let edit_controls_url date category = (patch_meal_url date category) ^ "/edit-controls"
 
 let%html render_date date = {|
         <td>|} [Html.txt (CalendarLib.Printer.Date.sprint "%A" date)] {|</td><td>|} [Html.txt (CalendarLib.Printer.Date.sprint "%d/%m/%Y" date)] {|</td>|}
@@ -23,6 +25,33 @@ let%html render_meal_search_result date category meals = {|
           (List.map (render_meal_suggestion (match date with None -> "INVALID" | Some d -> (meal_plan_url d)) category)  meals )
         {|</div>|}
 
+let%html render_view_button meal_name = {|
+                <a class="view-button"
+                        href=|}(Meal.meal_url meal_name){|>-></a>
+                |}
+
+let%html render_view_controls date meal_type meal_name = {| 
+        <div class="controls"
+             data-hx-trigger="input changed once from:previous .search-input"
+        data-hx-get=|} (edit_controls_url date meal_type) {|>
+                |}(match meal_name with Some name -> [render_view_button name] | None -> []){|
+        </div>
+        |}
+
+let%html render_edit_controls date meal_type = {| 
+        <div class="controls">
+                <button class="save-button"
+                        data-hx-trigger="click, keyup[keyCode==13] from:previous .search-input"
+                        data-hx-patch=|}(patch_meal_url date meal_type){|
+                        data-hx-target="closest td"
+                >S</button>
+                <button class="cancel-button"
+                        data-hx-get=|}(patch_meal_url date meal_type){|
+                        data-hx-target="closest td"
+                >X</button>
+        </div>
+        |}
+
 let%html render_meal date meal_type meal_name= {|
         <td>
                 <div class="meal-input">
@@ -33,16 +62,16 @@ let%html render_meal date meal_type meal_name= {|
                         value=|}(Option.value meal_name ~default:""){|
                         data-hx-get="meal-plan/meal-search"
                         data-hx-params="*"
-                        data-hx-trigger="input changed delay:200ms, search, mouseenter throttle:2s"
+                        data-hx-trigger="input changed delay:200ms, mouseenter throttle:2s"
                         data-hx-target="next .search-results"
                         data-hx-swap="outerHTML"
                         data-hx-vals=|} ("{\"date\":\"" ^ (date_str date) ^ "\"}") {|
                 >
                 |} [(render_meal_search_result None "" [])] {|
                 </div>
+                |} [(render_view_controls date meal_type meal_name)] {|
         </td>
         |}
-
 
 let%html render_edit_button date = {|
         <td>
@@ -50,6 +79,7 @@ let%html render_edit_button date = {|
                         data-hx-target="closest tr"
                         data-hx-swap="outerHTML"
                         data-hx-include="closest tr"
+                        data-hx-trigger="click"
                         data-hx-patch=|} (meal_plan_url date) 
                 {|>Save</button>
         </td>|}

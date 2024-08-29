@@ -1,0 +1,4 @@
+(library
+ (name meal)
+ (libraries types codex tyxml dream)
+ (preprocess (pps lwt_ppx tyxml-ppx)))
